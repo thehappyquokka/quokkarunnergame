@@ -22,7 +22,7 @@
       display: block;
       max-width: 100%;
       max-height: 100vh;
-      touch-action: none; /* Prevent default touch behaviors */
+      touch-action: none;
     }
     #restartButton {
       position: absolute;
@@ -34,7 +34,7 @@
       border: none;
       border-radius: 5px;
       cursor: pointer;
-      display: none; /* Hidden until game over */
+      display: none;
     }
     #restartButton:hover {
       background: #cc0000;
@@ -60,23 +60,23 @@ let gameOverSound;
 let backgroundMusic;
 let hasPlayedGameOverSound = false;
 let musicStarted = false;
-let scaleFactor; // For scaling game elements
-let canvasWidth = 800; // Base width
-let canvasHeight = 400; // Base height
+let scaleFactor;
+let canvasWidth = 800;
+let canvasHeight = 400;
 
 function setup() {
   // Calculate canvas size
-  let maxWidth = windowWidth * 0.95; // 95% of viewport width
-  let maxHeight = windowHeight * 0.95; // 95% of viewport height
-  let targetWidth = min(maxWidth, maxHeight * 2); // Maintain 2:1 aspect ratio
+  let maxWidth = windowWidth * 0.95;
+  let maxHeight = windowHeight * 0.95;
+  let targetWidth = min(maxWidth, maxHeight * 2);
   let targetHeight = targetWidth / 2;
   canvasWidth = targetWidth;
   canvasHeight = targetHeight;
-  scaleFactor = canvasWidth / 800; // Scale relative to original 800x400
+  scaleFactor = canvasWidth / 800;
 
   // Create canvas
   let canvas = createCanvas(canvasWidth, canvasHeight);
-  canvas.elt.style.touchAction = 'none'; // Prevent touch scrolling
+  canvas.elt.style.touchAction = 'none';
 
   // Load assets
   quokkaImg = loadImage('quokka.png');
@@ -125,9 +125,9 @@ function draw() {
   if (!gameOver) {
     // Draw background
     image(backgroundImg, 0, 0, width, height);
-    fill(255, 255, 100); // Bright yellow sun
+    fill(255, 255, 100);
     ellipse(700 * scaleFactor, 100 * scaleFactor, 80 * scaleFactor, 80 * scaleFactor);
-    fill(50, 205, 50); // Bright green ground
+    fill(50, 205, 50);
     rect(0, ground.y, width, height - ground.y);
 
     // Draw quokka
@@ -138,7 +138,7 @@ function draw() {
     }
 
     // Update quokka
-    quokka.vy += 0.5 * scaleFactor; // Gravity
+    quokka.vy += 0.5 * scaleFactor;
     quokka.y += quokka.vy;
     if (quokka.y > ground.y - quokka.h) {
       quokka.y = ground.y - quokka.h;
@@ -184,9 +184,7 @@ function draw() {
               console.error('Error stopping background music:', err);
             }
           }
-          // Show restart button
-          let restartButton = document.getElementById('restartButton');
-          restartButton.style.display = 'block';
+          document.getElementById('restartButton').style.display = 'block';
         }
       }
 
@@ -214,6 +212,9 @@ function draw() {
 }
 
 function touchStarted() {
+  // Unlock audio context
+  userStartAudio();
+  
   if (!gameStarted) {
     gameStarted = true;
     if (backgroundMusic) {
@@ -227,7 +228,7 @@ function touchStarted() {
       }
     }
   } else if (!gameOver && !quokka.jumping) {
-    quokka.vy = -12 * scaleFactor; // Jump
+    quokka.vy = -12 * scaleFactor;
     quokka.jumping = true;
     try {
       jumpSound.play();
@@ -236,11 +237,12 @@ function touchStarted() {
       console.error('Error playing jump sound:', err);
     }
   }
-  return false; // Prevent default touch behavior
+  return false;
 }
 
 function keyPressed() {
   if (key === 's' && !gameStarted) {
+    userStartAudio();
     gameStarted = true;
     if (backgroundMusic) {
       try {
@@ -254,7 +256,8 @@ function keyPressed() {
     }
   }
   if (key === ' ' && !quokka.jumping && !gameOver && gameStarted) {
-    quokka.vy = -12 * scaleFactor; // Jump
+    userStartAudio();
+    quokka.vy = -12 * scaleFactor;
     quokka.jumping = true;
     try {
       jumpSound.play();
@@ -266,6 +269,9 @@ function keyPressed() {
 }
 
 function restartGame() {
+  // Unlock audio context
+  userStartAudio();
+  
   // Restart game
   score = 0;
   obstacles = [];
@@ -282,13 +288,10 @@ function restartGame() {
       console.error('Error restarting background music:', err);
     }
   }
-  // Hide restart button
-  let restartButton = document.getElementById('restartButton');
-  restartButton.style.display = 'none';
+  document.getElementById('restartButton').style.display = 'none';
 }
 
 function windowResized() {
-  // Resize canvas on window resize
   let maxWidth = windowWidth * 0.95;
   let maxHeight = windowHeight * 0.95;
   let targetWidth = min(maxWidth, maxHeight * 2);
@@ -298,14 +301,12 @@ function windowResized() {
   scaleFactor = canvasWidth / 800;
   resizeCanvas(canvasWidth, canvasHeight);
   
-  // Update game elements
   quokka.x = 100 * scaleFactor;
   quokka.y = 300 * scaleFactor;
   quokka.w = 50 * scaleFactor;
   quokka.h = 50 * scaleFactor;
   ground.y = 350 * scaleFactor;
   ground.speed = 5 * scaleFactor;
-  // Update existing obstacles
   for (let obstacle of obstacles) {
     obstacle.y = ground.y - 30 * scaleFactor;
     obstacle.w = 30 * scaleFactor;
