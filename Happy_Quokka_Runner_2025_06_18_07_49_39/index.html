@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Happy Quokka Runner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/addons/p5.sound.min.js"></script>
+</head>
+<body>
+<script>
+// Declare global variables
+let quokka;
+let ground;
+let obstacles = [];
+let score = 0;
+let gameOver = false;
+let gameStarted = false;
+let quokkaImg;
+let quokkaJumpImg;
+let rockImg;
+let backgroundImg;
+let jumpSound;
+let gameOverSound;
+let backgroundMusic;
+let hasPlayedGameOverSound = false;
+let musicStarted = false;
+
+function setup() {
+  // Load assets
+  quokkaImg = loadImage('quokka.png');
+  quokkaJumpImg = loadImage('quokka_jump.png');
+  rockImg = loadImage('rock.png');
+  backgroundImg = loadImage('background.png');
+  
+  // Load sounds with error handling
+  try {
+    jumpSound = loadSound('jump.mp3', () => {
+      console.log('Jump sound loaded successfully');
+    }, (err) => {
+      console.error('Failed to load jump sound:', err);
+    });
+    gameOverSound = loadSound('gameover.mp3', () => {
+      console.log('Game over sound loaded successfully');
+    }, (err) => {
+      console.error('Failed to load game over sound:', err);
+    });
+    backgroundMusic = loadSound('background_music.mp3', () => {
+      console.log('Background music loaded successfully');
+    }, (err) => {
+      console.error('Failed to load background music:', err);
+    });
+  } catch (err) {
+    console.error('Error loading sounds:', err);
+  }
+  
+  // Create canvas
+  createCanvas(800, 400);
+  
+  // Initialize quokka
+  quokka = {
+    x: 100,
+    y: 300,
+    w: 50,
+    h: 50,
+    vy: 0,
+    jumping: false
+  };
+  
+  // Initialize ground
+  ground = {
+    y: 350,
+    speed: 5
+  };
+}
+
+function draw() {
+  if (!gameStarted) {
+    // Start screen
+    background(100);
+    textSize(32);
+    fill(255);
+    textAlign(CENTER);
+    text("Happy Quokka Runner", width / 2, height / 2 - 40);
+    text("Press S to Start", width / 2, height / 2);
+    return;
+  }
+  
+  if (!gameOver) {
+    // Draw background
+    image(backgroundImg, 0, 0, width, height);
+    fill(255, 255, 100); // Bright yellow sun
+    ellipse(700, 100, 80, 80);
+    fill(50, 205, 50); // Bright green ground
+    rect(0, ground.y, width, height - ground.y);
+
+    // Draw quokka
+    if (quokka.jumping) {
+      image(quokkaJumpImg, quokka.x, quokka.y, quokka.w, quokka.h);
+    } else {
+      image(quokkaImg, quokka.x, quokka.y, quokka.w, quokka.h);
+    }
+
+    // Update quokka
+    quokka.vy += 0.5; // Gravity
+    quokka.y += quokka.vy;
+    if (quokka.y > ground.y - quokka.h) {
+      quokka.y = ground.y - quokka.h;
+      quokka.vy = 0;
+      quokka.jumping = false;
+    }
+
+    // Spawn obstacles
+    if (frameCount % 60 === 0) {
+      obstacles.push({
+        x: width,
+        y: ground.y - 30,
+        w: 30,
+        h: 30
+      });
+    }
+
+    // Update and draw obstacles
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      obstacles[i].x -= ground.speed;
+      image(rockImg, obstacles[i].x, obstacles[i].y, obstacles[i].w, obstacles[i].h);
+
+      // Collision detection
+      if (
+        quokka.x + quokka.w > obstacles[i].x &&
+        quokka.x < obstacles[i].x + obstacles[i].w &&
+        quokka.y + quokka.h > obstacles[i].y
+      ) {
+        if (!hasPlayedGameOverSound) {
+          gameOver = true;
+          try {
+            gameOverSound.play();
+            console.log('Playing game over sound');
+          } catch (err) {
+            console.error('Error playing game over sound:', err);
+          }
+          hasPlayedGameOverSound = true;
+          if (backgroundMusic && musicStarted) {
+            try {
+              backgroundMusic.stop();
+              console.log('Background music stopped');
+            } catch (err) {
+              console.error('Error stopping background music:', err);
+            }
+          }
+        }
+      }
+
+      // Remove off-screen obstacles
+      if (obstacles[i].x < -obstacles[i].w) {
+        obstacles.splice(i, 1);
+      }
+    }
+
+    // Update score
+    score += 1;
+    textSize(20);
+    fill(0);
+    text("Score: " + floor(score / 60), 10, 30);
+  } else {
+    // Game over screen
+    background(100);
+    textSize(32);
+    fill(255);
+    textAlign(CENTER);
+    text("Game Over! Score: " + floor(score / 60), width / 2, height / 2);
+    text("Press R to Restart", width / 2, height / 2 + 40);
+  }
+}
+
+function keyPressed() {
+  if (key === 's' && !gameStarted) {
+    gameStarted = true;
+    if (backgroundMusic) {
+      try {
+        backgroundMusic.setVolume(0.5);
+        backgroundMusic.loop();
+        musicStarted = true;
+        console.log('Background music started on game start');
+      } catch (err) {
+        console.error('Error starting background music:', err);
+      }
+    }
+  }
+  if (key === ' ' && !quokka.jumping && !gameOver && gameStarted) {
+    quokka.vy = -12; // Jump
+    quokka.jumping = true;
+    try {
+      jumpSound.play();
+      console.log('Playing jump sound');
+    } catch (err) {
+      console.error('Error playing jump sound:', err);
+    }
+  }
+  if (key === 'r' && gameOver) {
+    // Restart game
+    score = 0;
+    obstacles = [];
+    quokka.y = ground.y - quokka.h;
+    quokka.vy = 0;
+    quokka.jumping = false;
+    gameOver = false;
+    hasPlayedGameOverSound = false;
+    if (backgroundMusic && musicStarted) {
+      try {
+        backgroundMusic.loop();
+        console.log('Background music restarted');
+      } catch (err) {
+        console.error('Error restarting background music:', err);
+      }
+    }
+  }
+}
+</script>
+</body>
+</html>
