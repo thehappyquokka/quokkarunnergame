@@ -1,0 +1,356 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Happy Quokka Runner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/addons/p5.sound.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #f0f0f0;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100vh;
+      touch-action: none; /* Prevent default touch behaviors */
+    }
+    #restartButton {
+      position: absolute;
+      bottom: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      display: none; /* Hidden until game over */
+    }
+    #restartButton:hover {
+      background: #cc0000;
+    }
+  </style>
+</head>
+<body>
+  <button id="restartButton" onclick="restartGame()">Restart</button>
+<script>
+// Declare global variables
+let quokka;
+let ground;
+let obstacles = [];
+let score = 0;
+let gameOver = false;
+let gameStarted = false;
+let quokkaImg;
+let quokkaJumpImg;
+let rockImg;
+let backgroundImg;
+let jumpSound;
+let gameOverSound;
+let backgroundMusic;
+let hasPlayedGameOverSound = false;
+let musicStarted = false;
+let scaleFactor; // For scaling game elements
+let canvasWidth = 800; // Base width
+let canvasHeight = 400; // Base height
+
+function setup() {
+  // Calculate canvas size
+  let maxWidth = windowWidth * 0.95; // 95% of viewport width
+  let maxHeight = windowHeight * 0.95; // 95% of viewport height
+  let targetWidth = min(maxWidth, maxHeight * 2); // Maintain 2:1 aspect ratio
+  let targetHeight = targetWidth / 2;
+  canvasWidth = targetWidth;
+  canvasHeight = targetHeight;
+  scaleFactor = canvasWidth / 800; // Scale relative to original 800x400
+
+  // Create canvas
+  let canvas = createCanvas(canvasWidth, canvasHeight);
+  canvas.elt.style.touchAction = 'none'; // Prevent touch scrolling
+
+  // Load assets
+  quokkaImg = loadImage('quokka.png');
+  quokkaJumpImg = loadImage('quokka_jump.png');
+  rockImg = loadImage('rock.png');
+  backgroundImg = loadImage('background.png');
+  
+  // Load sounds with error handling
+  try {
+    jumpSound = loadSound('jump.mp3', () => console.log('Jump sound loaded successfully'), (err) => console.error('Failed to load jump sound:', err));
+    gameOverSound = loadSound('gameover.mp3', () => console.log('Game over sound loaded successfully'), (err) => console.error('Failed to load game over sound:', err));
+    backgroundMusic = loadSound('background_music.mp3', () => console.log('Background music loaded successfully'), (err) => console.error('Failed to load background music:', err));
+  } catch (err) {
+    console.error('Error loading sounds:', err);
+  }
+  
+  // Initialize quokka (scaled)
+  quokka = {
+    x: 100 * scaleFactor,
+    y: 300 * scaleFactor,
+    w: 50 * scaleFactor,
+    h: 50 * scaleFactor,
+    vy: 0,
+    jumping: false
+  };
+  
+  // Initialize ground (scaled)
+  ground = {
+    y: 350 * scaleFactor,
+    speed: 5 * scaleFactor
+  };
+}
+
+function draw() {
+  if (!gameStarted) {
+    // Start screen
+    background(100);
+    textSize(32 * scaleFactor);
+    fill(255);
+    textAlign(CENTER);
+    text("Happy Quokka Runner", width / 2, height / 2 - 40 * scaleFactor);
+    text("Tap to Start", width / 2, height / 2);
+    return;
+  }
+  
+  if (!gameOver) {
+    // Draw background
+    image(backgroundImg, 0, 0, width, height);
+    fill(255, 255, 100); // Bright yellow sun
+    ellipse(700 * scaleFactor, 100 * scaleFactor, 80 * scaleFactor, 80 * scaleFactor);
+    fill(50, 205, 50); // Bright green ground
+    rect(0, ground.y, width, height - ground.y);
+
+    // Draw quokka
+    if (quokka.jumping) {
+      image(quokkaJumpImg, quokka.x, quokka.y, quokka.w, quokka.h);
+    } else {
+      image(quokkaImg, quokka.x, quokka.y, quokka.w, quokka.h);
+    }
+
+    // Update quokka
+    quokka.vy += 0.5 * scaleFactor; // Gravity
+    quokka.y += quokka.vy;
+    if (quokka.y > ground.y - quokka.h) {
+      quokka.y = ground.y - quokka.h;
+      quokka.vy = 0;
+      quokka.jumping = false;
+    }
+
+    // Spawn obstacles
+    if (frameCount % 60 === 0) {
+      obstacles.push({
+        x: width,
+        y: ground.y - 30 * scaleFactor,
+        w: 30 * scaleFactor,
+        h: 30 * scaleFactor
+      });
+    }
+
+    // Update and draw obstacles
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      obstacles[i].x -= ground.speed;
+      image(rockImg, obstacles[i].x, obstacles[i].y, obstacles[i].w, obstacles[i].h);
+
+      // Collision detection
+      if (
+        quokka.x + quokka.w > obstacles[i].x &&
+        quokka.x < obstacles[i].x + obstacles[i].w &&
+        quokka.y + quokka.h > obstacles[i].y
+      ) {
+        if (!hasPlayedGameOverSound) {
+          gameOver = true;
+          try {
+            gameOverSound.play();
+            console.log('Playing game over sound');
+          } catch (err) {
+            console.error('Error playing game over sound:', err);
+          }
+          hasPlayedGameOverSound = true;
+          if (backgroundMusic && musicStarted) {
+            try {
+              backgroundMusic.stop();
+              console.log('Background music stopped');
+            } catch (err) {
+              console.error('Error stopping background music:', err);
+            }
+          }
+          // Show restart button
+          let restartButton = document.getElementById('restartButton');
+          restartButton.style.display = 'block';
+        }
+      }
+
+      // Remove off-screen obstacles
+      if (obstacles[i].x < -obstacles[i].w) {
+        obstacles.splice(i, 1);
+      }
+    }
+
+    // Update score
+    score += 1;
+    textSize(20 * scaleFactor);
+    fill(0);
+    textAlign(LEFT);
+    text("Score: " + floor(score / 60), 10 * scaleFactor, 30 * scaleFactor);
+  } else {
+    // Game over screen
+    background(100);
+    textSize(32 * scaleFactor);
+    fill(255);
+    textAlign(CENTER);
+    text("Game Over! Score: " + floor(score / 60), width / 2, height / 2 - 20 * scaleFactor);
+    text("Tap Restart Button", width / 2, height / 2 + 20 * scaleFactor);
+  }
+}
+
+function touchStarted() {
+  if (!gameStarted) {
+    gameStarted = true;
+    if (backgroundMusic) {
+      try {
+        backgroundMusic.setVolume(0.5);
+        backgroundMusic.loop();
+        musicStarted = true;
+        console.log('Background music started on game start');
+      } catch (err) {
+        console.error('Error starting background music:', err);
+      }
+    }
+  } else if (!gameOver && !quokka.jumping) {
+    quokka.vy = -12 * scaleFactor; // Jump
+    quokka.jumping = true;
+    try {
+      jumpSound.play();
+      console.log('Playing jump sound');
+    } catch (err) {
+      console.error('Error playing jump sound:', err);
+    }
+  }
+  return false; // Prevent default touch behavior
+}
+
+function keyPressed() {
+  if (key === 's' && !gameStarted) {
+    gameStarted = true;
+    if (backgroundMusic) {
+      try {
+        backgroundMusic.setVolume(0.5);
+        backgroundMusic.loop();
+        musicStarted = true;
+        console.log('Background music started on game start');
+      } catch (err) {
+        console.error('Error starting background music:', err);
+      }
+    }
+  }
+  if (key === ' ' && !quokka.jumping && !gameOver && gameStarted) {
+    quokka.vy = -12 * scaleFactor; // Jump
+    quokka.jumping = true;
+    try {
+      jumpSound.play();
+      console.log('Playing jump sound');
+    } catch (err) {
+      console.error('Error playing jump sound:', err);
+    }
+  }
+}
+
+function restartGame() {
+  // Restart game
+  score = 0;
+  obstacles = [];
+  quokka.y = ground.y - quokka.h;
+  quokka.vy = 0;
+  quokka.jumping = false;
+  gameOver = false;
+  hasPlayedGameOverSound = false;
+  if (backgroundMusic && musicStarted) {
+    try {
+      backgroundMusic.loop();
+      console.log('Background music restarted');
+    } catch (err) {
+      console.error('Error restarting background music:', err);
+    }
+  }
+  // Hide restart button
+  let restartButton = document.getElementById('restartButton');
+  restartButton.style.display = 'none';
+}
+
+function windowResized() {
+  // Resize canvas on window resize
+  let maxWidth = windowWidth * 0.95;
+  let maxHeight = windowHeight * 0.95;
+  let targetWidth = min(maxWidth, maxHeight * 2);
+  let targetHeight = targetWidth / 2;
+  canvasWidth = targetWidth;
+  canvasHeight = targetHeight;
+  scaleFactor = canvasWidth / 800;
+  resizeCanvas(canvasWidth, canvasHeight);
+  
+  // Update game elements
+  quokka.x = 100 * scaleFactor;
+  quokka.y = 300 * scaleFactor;
+  quokka.w = 50 * scaleFactor;
+  quokka.h = 50 * scaleFactor;
+  ground.y = 350 * scaleFactor;
+  ground.speed = 5 * scaleFactor;
+  // Update existing obstacles
+  for (let obstacle of obstacles) {
+    obstacle.y = ground.y - 30 * scaleFactor;
+    obstacle.w = 30 * scaleFactor;
+    obstacle.h = 30 * scaleFactor;
+  }
+}
+</script>
+</body>
+</html>
